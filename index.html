@@ -12,7 +12,7 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- สคริปต์ Firebase -->
+  <!-- เพิ่ม: เรียกใช้งาน Firebase SDK สำหรับระบบฐานข้อมูล -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
@@ -25,14 +25,38 @@
       padding: 0;
       overflow-x: hidden;
     }
-    #transit-map { width: 100%; height: 100%; min-height: 460px; z-index: 10; }
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    @keyframes pulse-ring { 0% { transform: scale(0.88); opacity: 0.9; } 70% { transform: scale(1.45); opacity: 0; } 100% { transform: scale(1.45); opacity: 0; } }
-    .transfer-hub-pulse { animation: pulse-ring 2.2s infinite; }
-    .leaflet-popup-content-wrapper { border-radius: 14px; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.18); }
+    #transit-map {
+      width: 100%;
+      height: 100%;
+      min-height: 460px;
+      z-index: 10;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.88); opacity: 0.9; }
+      70% { transform: scale(1.45); opacity: 0; }
+      100% { transform: scale(1.45); opacity: 0; }
+    }
+    .transfer-hub-pulse {
+      animation: pulse-ring 2.2s infinite;
+    }
+    .leaflet-popup-content-wrapper {
+      border-radius: 14px;
+      box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.18);
+    }
   </style>
 </head>
 <body>
@@ -42,7 +66,7 @@
     const { useState, useEffect, useRef, useMemo } = React;
 
     // ==========================================
-    // ตั้งค่าเชื่อมต่อ Firebase (ใส่ค่าของคุณบอลตรงนี้ครับ)
+    // ตั้งค่าฐานข้อมูล Firebase
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyB--4DdOzX-Lo-osD31CJQ74Y5xHnd-jck",
@@ -59,8 +83,8 @@
         window.firebase.initializeApp(firebaseConfig);
       }
       db = window.firebase.firestore();
-    } catch (err) {
-      console.error("Firebase ยังไม่ได้ตั้งค่าหรือเชื่อมต่อไม่ได้:", err);
+    } catch (e) {
+      console.log("Firebase ยังไม่ได้ตั้งค่า จะสลับไปใช้ระบบออฟไลน์แทน", e);
     }
 
     const STORAGE_KEYS = {
@@ -74,9 +98,24 @@
     };
 
     const OPERATION_STATUSES = {
-      operating: { id: 'operating', label: '🟢 เปิดให้บริการ', fullLabel: '🟢 เปิดให้บริการจริงในปัจจุบัน', badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-      future_project: { id: 'future_project', label: '🚧 โครงการในอนาคต', fullLabel: '🚧 โครงการในอนาคต / แผนแม่บท', badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
-      suggested_route: { id: 'suggested_route', label: '💡 เส้นทางเสนอแนะ', fullLabel: '💡 เส้นทางเสนอแนะจากประชาชน / ชุมชน', badgeClass: 'bg-amber-100 text-amber-900 border-amber-300' }
+      operating: {
+        id: 'operating',
+        label: '🟢 เปิดให้บริการ',
+        fullLabel: '🟢 เปิดให้บริการจริงในปัจจุบัน',
+        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300'
+      },
+      future_project: {
+        id: 'future_project',
+        label: '🚧 โครงการในอนาคต',
+        fullLabel: '🚧 โครงการในอนาคต / แผนแม่บท',
+        badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300'
+      },
+      suggested_route: {
+        id: 'suggested_route',
+        label: '💡 เส้นทางเสนอแนะ',
+        fullLabel: '💡 เส้นทางเสนอแนะจากประชาชน / ชุมชน',
+        badgeClass: 'bg-amber-100 text-amber-900 border-amber-300'
+      }
     };
 
     function formatThaiDateTime(isoString) {
@@ -84,60 +123,142 @@
       try {
         const d = new Date(isoString);
         if (isNaN(d.getTime())) return 'ไม่ระบุเวลา';
-        return d.toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' น.';
-      } catch { return 'ไม่ระบุเวลา'; }
-    }
-
-    function calculateHaversineMeters(lat1, lon1, lat2, lon2) {
-      const nLat1 = Number(lat1); const nLon1 = Number(lon1); const nLat2 = Number(lat2); const nLon2 = Number(lon2);
-      if (!Number.isFinite(nLat1) || !Number.isFinite(nLon1) || !Number.isFinite(nLat2) || !Number.isFinite(nLon2)) return 999999;
-      const R = 6371000; const toRad = d => (d * Math.PI) / 180;
-      const dLat = toRad(nLat2 - nLat1); const dLon = toRad(nLon2 - nLon1);
-      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(nLat1)) * Math.cos(toRad(nLat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return Math.round(R * c);
+        return d.toLocaleString('th-TH', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) + ' น.';
+      } catch {
+        return 'ไม่ระบุเวลา';
+      }
     }
 
     function extractRouteSubpathOnRoad(routeObj, passStops) {
       if (!Array.isArray(passStops) || passStops.length < 2) return [];
-      const boardStop = passStops[0]; const alightStop = passStops[passStops.length - 1];
+      const boardStop = passStops[0];
+      const alightStop = passStops[passStops.length - 1];
       const roadCoords = routeObj?.road_coordinates;
-      if (!Array.isArray(roadCoords) || roadCoords.length < 2) return passStops.map(st => [Number(st.latitude), Number(st.longitude)]);
-      const bLat = Number(boardStop.latitude); const bLng = Number(boardStop.longitude);
-      const aLat = Number(alightStop.latitude); const aLng = Number(alightStop.longitude);
-      let startIdx = 0; let minStartDist = Infinity;
+
+      if (!Array.isArray(roadCoords) || roadCoords.length < 2) {
+        return passStops.map(st => [Number(st.latitude), Number(st.longitude)]);
+      }
+
+      const bLat = Number(boardStop.latitude);
+      const bLng = Number(boardStop.longitude);
+      const aLat = Number(alightStop.latitude);
+      const aLng = Number(alightStop.longitude);
+
+      let startIdx = 0;
+      let minStartDist = Infinity;
       for (let i = 0; i < roadCoords.length; i++) {
         const d = calculateHaversineMeters(bLat, bLng, roadCoords[i][0], roadCoords[i][1]);
-        if (d < minStartDist) { minStartDist = d; startIdx = i; }
+        if (d < minStartDist) {
+          minStartDist = d;
+          startIdx = i;
+        }
       }
-      let endIdx = startIdx; let minEndDist = Infinity;
+
+      let endIdx = startIdx;
+      let minEndDist = Infinity;
       for (let i = startIdx; i < roadCoords.length; i++) {
         const d = calculateHaversineMeters(aLat, aLng, roadCoords[i][0], roadCoords[i][1]);
-        if (d < minEndDist) { minEndDist = d; endIdx = i; }
+        if (d < minEndDist) {
+          minEndDist = d;
+          endIdx = i;
+        }
       }
-      if (endIdx > startIdx) return roadCoords.slice(startIdx, endIdx + 1);
+
+      if (endIdx > startIdx) {
+        return roadCoords.slice(startIdx, endIdx + 1);
+      }
       return passStops.map(st => [Number(st.latitude), Number(st.longitude)]);
     }
 
     const MAP_TILE_PROVIDERS = {
-      google_streets: { name: 'Google Maps มาตรฐาน (ภาษาไทย)', url: 'https://mt1.google.com/vt/lyrs=m&hl=th&x={x}&y={y}&z={z}', attribution: '&copy; Google Maps' },
-      google_terrain: { name: 'Google Terrain (ภูมิประเทศเชียงใหม่)', url: 'https://mt1.google.com/vt/lyrs=p&hl=th&x={x}&y={y}&z={z}', attribution: '&copy; Google Maps Terrain' },
-      esri_canvas: { name: 'Esri Light Gray (เน้นเส้นทางชัด)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', attribution: 'Tiles &copy; Esri' },
-      google_hybrid: { name: 'Google Satellite (ดาวเทียม+ชื่อถนน)', url: 'https://mt1.google.com/vt/lyrs=y&hl=th&x={x}&y={y}&z={z}', attribution: '&copy; Google Satellite' }
+      google_streets: {
+        name: 'Google Maps มาตรฐาน (ภาษาไทย)',
+        url: 'https://mt1.google.com/vt/lyrs=m&hl=th&x={x}&y={y}&z={z}',
+        attribution: '&copy; Google Maps'
+      },
+      google_terrain: {
+        name: 'Google Terrain (ภูมิประเทศเชียงใหม่)',
+        url: 'https://mt1.google.com/vt/lyrs=p&hl=th&x={x}&y={y}&z={z}',
+        attribution: '&copy; Google Maps Terrain'
+      },
+      esri_canvas: {
+        name: 'Esri Light Gray (เน้นเส้นทางชัด)',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles &copy; Esri'
+      },
+      google_hybrid: {
+        name: 'Google Satellite (ดาวเทียม+ชื่อถนน)',
+        url: 'https://mt1.google.com/vt/lyrs=y&hl=th&x={x}&y={y}&z={z}',
+        attribution: '&copy; Google Satellite'
+      }
     };
 
     const SERVICE_TYPES = {
-      lrt_concept: { label: '🚝 รถไฟฟ้า (LRT / Metro — ระบุลอยฟ้า/ระดับดิน/ใต้ดินได้)', short: '🚝 รถไฟฟ้า', supportsStationLevels: true, tier: 'main_corridor_only', tierLabel: 'รองรับการระบุสถานี ลอยฟ้า / ระดับดิน / ใต้ดิน' },
-      city_bus: { label: '🚌 รถเมล์ไฟฟ้า (EV City Bus)', short: '🚌 รถเมล์ EV', supportsStationLevels: false, tier: 'main_corridor_only', tierLabel: 'วิ่งระดับพื้นดินตามแนวถนนหลัก' },
-      tram_surface: { label: '🚋 รถรางชมเมืองระดับดิน (Surface Tram)', short: '🚋 รถราง Tram', supportsStationLevels: false, tier: 'main_corridor_only', tierLabel: 'วิ่งระดับพื้นดินตามแนวถนนหลัก' },
-      songthaew_modern: { label: '🛻 รถสองแถวแดงจัดระเบียบใหม่ (Smart Red Car)', short: '🛻 รถแดง', supportsStationLevels: false, tier: 'local_soi_allowed', tierLabel: 'วิ่งระดับพื้นดิน เชื่อมซอยและชุมชนได้' },
-      feeder: { label: '🚐 รถมินิบัส/Feeder ชุมชน', short: '🚐 รถ Feeder', supportsStationLevels: false, tier: 'local_soi_allowed', tierLabel: 'วิ่งระดับพื้นดิน เชื่อมซอยและชุมชนได้' }
+      lrt_concept: {
+        label: '🚝 รถไฟฟ้า (LRT / Metro — ระบุลอยฟ้า/ระดับดิน/ใต้ดินได้)',
+        short: '🚝 รถไฟฟ้า',
+        supportsStationLevels: true,
+        tier: 'main_corridor_only',
+        tierLabel: 'รองรับการระบุสถานี ลอยฟ้า / ระดับดิน / ใต้ดิน'
+      },
+      city_bus: {
+        label: '🚌 รถเมล์ไฟฟ้า (EV City Bus)',
+        short: '🚌 รถเมล์ EV',
+        supportsStationLevels: false,
+        tier: 'main_corridor_only',
+        tierLabel: 'วิ่งระดับพื้นดินตามแนวถนนหลัก'
+      },
+      tram_surface: {
+        label: '🚋 รถรางชมเมืองระดับดิน (Surface Tram)',
+        short: '🚋 รถราง Tram',
+        supportsStationLevels: false,
+        tier: 'main_corridor_only',
+        tierLabel: 'วิ่งระดับพื้นดินตามแนวถนนหลัก'
+      },
+      songthaew_modern: {
+        label: '🛻 รถสองแถวแดงจัดระเบียบใหม่ (Smart Red Car)',
+        short: '🛻 รถแดง',
+        supportsStationLevels: false,
+        tier: 'local_soi_allowed',
+        tierLabel: 'วิ่งระดับพื้นดิน เชื่อมซอยและชุมชนได้'
+      },
+      feeder: {
+        label: '🚐 รถมินิบัส/Feeder ชุมชน',
+        short: '🚐 รถ Feeder',
+        supportsStationLevels: false,
+        tier: 'local_soi_allowed',
+        tierLabel: 'วิ่งระดับพื้นดิน เชื่อมซอยและชุมชนได้'
+      }
     };
 
     const STATION_LEVELS = {
-      at_grade: { id: 'at_grade', label: '🚊 ระดับดิน (At-Grade)', short: '🚊 ระดับดิน', badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300', routingRule: 'วิ่งเกาะตามแนวถนนจริง (OSRM)' },
-      elevated: { id: 'elevated', label: '🚝 ลอยฟ้า (Elevated)', short: '🚝 ลอยฟ้า', badgeClass: 'bg-sky-100 text-sky-800 border-sky-300', routingRule: 'วิ่งเกาะตามแนวถนนจริง (OSRM)' },
-      underground: { id: 'underground', label: '🚇 ใต้ดิน (Underground)', short: '🚇 ใต้ดิน', badgeClass: 'bg-purple-100 text-purple-800 border-purple-300', routingRule: 'เชื่อมตรงระหว่างสถานีแบบอุโมงค์' }
+      at_grade: {
+        id: 'at_grade',
+        label: '🚊 ระดับดิน (At-Grade)',
+        short: '🚊 ระดับดิน',
+        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        routingRule: 'วิ่งเกาะตามแนวถนนจริง (OSRM)'
+      },
+      elevated: {
+        id: 'elevated',
+        label: '🚝 ลอยฟ้า (Elevated)',
+        short: '🚝 ลอยฟ้า',
+        badgeClass: 'bg-sky-100 text-sky-800 border-sky-300',
+        routingRule: 'วิ่งเกาะตามแนวถนนจริง (OSRM)'
+      },
+      underground: {
+        id: 'underground',
+        label: '🚇 ใต้ดิน (Underground)',
+        short: '🚇 ใต้ดิน',
+        badgeClass: 'bg-purple-100 text-purple-800 border-purple-300',
+        routingRule: 'เชื่อมตรงระหว่างสถานีแบบอุโมงค์'
+      }
     };
 
     const ROUTE_COLORS = [
@@ -150,9 +271,13 @@
 
     function getAvailableRouteColor(currentRoutes, isLrt) {
       const usedHexes = currentRoutes.map(r => String(r.color_hex).toUpperCase());
-      if (isLrt && !usedHexes.includes('#BE123C')) return '#BE123C';
+      if (isLrt && !usedHexes.includes('#BE123C')) {
+        return '#BE123C';
+      }
       const unusedColors = ROUTE_COLORS.filter(c => !usedHexes.includes(c.hex.toUpperCase()));
-      if (unusedColors.length > 0) return unusedColors[0].hex;
+      if (unusedColors.length > 0) {
+        return unusedColors[0].hex;
+      }
       return ROUTE_COLORS[Math.floor(Math.random() * ROUTE_COLORS.length)].hex;
     }
 
@@ -176,26 +301,35 @@
       { id: 'pl-maejo', name: 'มหาวิทยาลัยแม่โจ้', keywords: 'แม่โจ้ ม.แม่โจ้ สันทราย', lat: 18.89820, lng: 99.01280 }
     ];
 
-    function estimateWalkMinutes(meters) { return Math.max(1, Math.round(meters / 75)); }
+    function estimateWalkMinutes(meters) {
+      return Math.max(1, Math.round(meters / 75));
+    }
 
     function computeTransitItineraries(originPt, destPt, activeRoutes, stopsMap) {
       if (!originPt || !destPt) return [];
       const results = [];
       const directWalkMeters = calculateHaversineMeters(originPt.lat, originPt.lng, destPt.lat, destPt.lng);
 
-      const routeStopLists = activeRoutes.map(r => {
-        const stops = (r.stop_ids || []).map((sid, idx) => {
-          const st = stopsMap[sid]; return st ? { ...st, seqIndex: idx } : null;
-        }).filter(Boolean);
-        return { route: r, stops };
-      }).filter(item => item.stops.length >= 2);
+      const routeStopLists = activeRoutes
+        .map(r => {
+          const stops = (r.stop_ids || [])
+            .map((sid, idx) => {
+              const st = stopsMap[sid];
+              return st ? { ...st, seqIndex: idx } : null;
+            })
+            .filter(Boolean);
+          return { route: r, stops };
+        })
+        .filter(item => item.stops.length >= 2);
 
       routeStopLists.forEach(({ route, stops }) => {
         let bestSingleForRoute = null;
+
         for (let i = 0; i < stops.length - 1; i++) {
           const boardStop = stops[i];
           const walkToBoard = calculateHaversineMeters(originPt.lat, originPt.lng, boardStop.latitude, boardStop.longitude);
-          if (walkToBoard > 4500) continue;
+          if (walkToBoard > 4500) continue; 
+
           for (let j = i + 1; j < stops.length; j++) {
             const alightStop = stops[j];
             const walkFromAlight = calculateHaversineMeters(alightStop.latitude, alightStop.longitude, destPt.lat, destPt.lng);
@@ -210,53 +344,167 @@
             if (!bestSingleForRoute || totalScore < bestSingleForRoute.score) {
               const passStops = stops.slice(i, j + 1);
               bestSingleForRoute = {
-                id: `itin-single-${route.id}-${i}-${j}`, type: 'single_route', badge: 'ต่อเดียวถึง (ไม่ต้องเปลี่ยนสาย)', score: totalScore, totalMinutes: walkMins + transitMins, totalWalkMeters: walkToBoard + walkFromAlight, transferCount: 0,
+                id: `itin-single-${route.id}-${i}-${j}`,
+                type: 'single_route',
+                badge: 'ต่อเดียวถึง (ไม่ต้องเปลี่ยนสาย)',
+                score: totalScore,
+                totalMinutes: walkMins + transitMins,
+                totalWalkMeters: walkToBoard + walkFromAlight,
+                transferCount: 0,
                 steps: [
-                  { mode: 'walk', fromName: originPt.name, toName: boardStop.name, fromCoord: [originPt.lat, originPt.lng], toCoord: [Number(boardStop.latitude), Number(boardStop.longitude)], distanceMeters: walkToBoard, durationMinutes: estimateWalkMinutes(walkToBoard) },
-                  { mode: 'transit', route, boardStop, alightStop, stopCount, passStops, durationMinutes: transitMins },
-                  { mode: 'walk', fromName: alightStop.name, toName: destPt.name, fromCoord: [Number(alightStop.latitude), Number(alightStop.longitude)], toCoord: [destPt.lat, destPt.lng], distanceMeters: walkFromAlight, durationMinutes: estimateWalkMinutes(walkFromAlight) }
+                  {
+                    mode: 'walk',
+                    fromName: originPt.name,
+                    toName: boardStop.name,
+                    fromCoord: [originPt.lat, originPt.lng],
+                    toCoord: [Number(boardStop.latitude), Number(boardStop.longitude)],
+                    distanceMeters: walkToBoard,
+                    durationMinutes: estimateWalkMinutes(walkToBoard)
+                  },
+                  {
+                    mode: 'transit',
+                    route,
+                    boardStop,
+                    alightStop,
+                    stopCount,
+                    passStops,
+                    durationMinutes: transitMins
+                  },
+                  {
+                    mode: 'walk',
+                    fromName: alightStop.name,
+                    toName: destPt.name,
+                    fromCoord: [Number(alightStop.latitude), Number(alightStop.longitude)],
+                    toCoord: [destPt.lat, destPt.lng],
+                    distanceMeters: walkFromAlight,
+                    durationMinutes: estimateWalkMinutes(walkFromAlight)
+                  }
                 ]
               };
             }
           }
         }
-        if (bestSingleForRoute) results.push(bestSingleForRoute);
+
+        if (bestSingleForRoute) {
+          results.push(bestSingleForRoute);
+        }
       });
 
       for (let a = 0; a < routeStopLists.length; a++) {
         for (let b = 0; b < routeStopLists.length; b++) {
           if (a === b) continue;
-          const rA = routeStopLists[a]; const rB = routeStopLists[b];
-          const candidateBoardsA = rA.stops.map(st => ({ stop: st, dist: calculateHaversineMeters(originPt.lat, originPt.lng, st.latitude, st.longitude) })).filter(x => x.dist <= 4500).sort((x, y) => x.dist - y.dist).slice(0, 3);
-          const candidateAlightsB = rB.stops.map(st => ({ stop: st, dist: calculateHaversineMeters(st.latitude, st.longitude, destPt.lat, destPt.lng) })).filter(x => x.dist <= 4500).sort((x, y) => x.dist - y.dist).slice(0, 3);
+          const rA = routeStopLists[a];
+          const rB = routeStopLists[b];
+
+          const candidateBoardsA = rA.stops
+            .map(st => ({
+              stop: st,
+              dist: calculateHaversineMeters(originPt.lat, originPt.lng, st.latitude, st.longitude)
+            }))
+            .filter(x => x.dist <= 4500)
+            .sort((x, y) => x.dist - y.dist)
+            .slice(0, 3);
+
+          const candidateAlightsB = rB.stops
+            .map(st => ({
+              stop: st,
+              dist: calculateHaversineMeters(st.latitude, st.longitude, destPt.lat, destPt.lng)
+            }))
+            .filter(x => x.dist <= 4500)
+            .sort((x, y) => x.dist - y.dist)
+            .slice(0, 3);
+
           if (candidateBoardsA.length === 0 || candidateAlightsB.length === 0) continue;
+
           let bestTransferPair = null;
 
           candidateBoardsA.forEach(boardAItem => {
             const boardA = boardAItem.stop;
             for (let idxA = boardA.seqIndex + 1; idxA < rA.stops.length; idxA++) {
               const transferStopA = rA.stops[idxA];
+
               candidateAlightsB.forEach(alightBItem => {
                 const alightB = alightBItem.stop;
                 for (let idxB = 0; idxB < alightB.seqIndex; idxB++) {
                   const transferStopB = rB.stops[idxB];
-                  const transferWalk = calculateHaversineMeters(transferStopA.latitude, transferStopA.longitude, transferStopB.latitude, transferStopB.longitude);
+                  const transferWalk = calculateHaversineMeters(
+                    transferStopA.latitude,
+                    transferStopA.longitude,
+                    transferStopB.latitude,
+                    transferStopB.longitude
+                  );
+
                   if (transferWalk <= 450) {
-                    const stopsCountA = idxA - boardA.seqIndex; const stopsCountB = alightB.seqIndex - idxB;
+                    const stopsCountA = idxA - boardA.seqIndex;
+                    const stopsCountB = alightB.seqIndex - idxB;
                     const totalWalk = boardAItem.dist + transferWalk + alightBItem.dist;
                     const transitMinsA = Math.max(2, Math.round(stopsCountA * (rA.route.service_type === 'lrt_concept' ? 2.0 : 2.6)));
                     const transitMinsB = Math.max(2, Math.round(stopsCountB * (rB.route.service_type === 'lrt_concept' ? 2.0 : 2.6)));
-                    const totalMins = estimateWalkMinutes(boardAItem.dist) + transitMinsA + estimateWalkMinutes(transferWalk) + 4 + transitMinsB + estimateWalkMinutes(alightBItem.dist);
+                    const totalMins =
+                      estimateWalkMinutes(boardAItem.dist) +
+                      transitMinsA +
+                      estimateWalkMinutes(transferWalk) +
+                      4 +
+                      transitMinsB +
+                      estimateWalkMinutes(alightBItem.dist);
+
                     const score = totalWalk * 2.2 + (stopsCountA + stopsCountB) * 180 + 550;
+
                     if (!bestTransferPair || score < bestTransferPair.score) {
                       bestTransferPair = {
-                        id: `itin-transfer-${rA.route.id}-${rB.route.id}-${boardA.seqIndex}-${idxA}-${idxB}-${alightB.seqIndex}`, type: 'transfer_1', badge: `ต่อรถ 1 ครั้ง (${rA.route.code} ➔ ${rB.route.code})`, score, totalMinutes: totalMins, totalWalkMeters: totalWalk, transferCount: 1,
+                        id: `itin-transfer-${rA.route.id}-${rB.route.id}-${boardA.seqIndex}-${idxA}-${idxB}-${alightB.seqIndex}`,
+                        type: 'transfer_1',
+                        badge: `ต่อรถ 1 ครั้ง (${rA.route.code} ➔ ${rB.route.code})`,
+                        score,
+                        totalMinutes: totalMins,
+                        totalWalkMeters: totalWalk,
+                        transferCount: 1,
                         steps: [
-                          { mode: 'walk', fromName: originPt.name, toName: boardA.name, fromCoord: [originPt.lat, originPt.lng], toCoord: [Number(boardA.latitude), Number(boardA.longitude)], distanceMeters: boardAItem.dist, durationMinutes: estimateWalkMinutes(boardAItem.dist) },
-                          { mode: 'transit', route: rA.route, boardStop: boardA, alightStop: transferStopA, stopCount: stopsCountA, passStops: rA.stops.slice(boardA.seqIndex, idxA + 1), durationMinutes: transitMinsA },
-                          { mode: 'transfer_walk', fromName: transferStopA.name, toName: transferStopB.name, fromCoord: [Number(transferStopA.latitude), Number(transferStopA.longitude)], toCoord: [Number(transferStopB.latitude), Number(transferStopB.longitude)], distanceMeters: transferWalk, durationMinutes: Math.max(2, estimateWalkMinutes(transferWalk)) },
-                          { mode: 'transit', route: rB.route, boardStop: transferStopB, alightStop: alightB, stopCount: stopsCountB, passStops: rB.stops.slice(idxB, alightB.seqIndex + 1), durationMinutes: transitMinsB },
-                          { mode: 'walk', fromName: alightB.name, toName: destPt.name, fromCoord: [Number(alightB.latitude), Number(alightB.longitude)], toCoord: [destPt.lat, destPt.lng], distanceMeters: alightBItem.dist, durationMinutes: estimateWalkMinutes(alightBItem.dist) }
+                          {
+                            mode: 'walk',
+                            fromName: originPt.name,
+                            toName: boardA.name,
+                            fromCoord: [originPt.lat, originPt.lng],
+                            toCoord: [Number(boardA.latitude), Number(boardA.longitude)],
+                            distanceMeters: boardAItem.dist,
+                            durationMinutes: estimateWalkMinutes(boardAItem.dist)
+                          },
+                          {
+                            mode: 'transit',
+                            route: rA.route,
+                            boardStop: boardA,
+                            alightStop: transferStopA,
+                            stopCount: stopsCountA,
+                            passStops: rA.stops.slice(boardA.seqIndex, idxA + 1),
+                            durationMinutes: transitMinsA
+                          },
+                          {
+                            mode: 'transfer_walk',
+                            fromName: transferStopA.name,
+                            toName: transferStopB.name,
+                            fromCoord: [Number(transferStopA.latitude), Number(transferStopA.longitude)],
+                            toCoord: [Number(transferStopB.latitude), Number(transferStopB.longitude)],
+                            distanceMeters: transferWalk,
+                            durationMinutes: Math.max(2, estimateWalkMinutes(transferWalk))
+                          },
+                          {
+                            mode: 'transit',
+                            route: rB.route,
+                            boardStop: transferStopB,
+                            alightStop: alightB,
+                            stopCount: stopsCountB,
+                            passStops: rB.stops.slice(idxB, alightB.seqIndex + 1),
+                            durationMinutes: transitMinsB
+                          },
+                          {
+                            mode: 'walk',
+                            fromName: alightB.name,
+                            toName: destPt.name,
+                            fromCoord: [Number(alightB.latitude), Number(alightB.longitude)],
+                            toCoord: [destPt.lat, destPt.lng],
+                            distanceMeters: alightBItem.dist,
+                            durationMinutes: estimateWalkMinutes(alightBItem.dist)
+                          }
                         ]
                       };
                     }
@@ -265,174 +513,134 @@
               });
             }
           });
-          if (bestTransferPair) results.push(bestTransferPair);
+
+          if (bestTransferPair) {
+            results.push(bestTransferPair);
+          }
         }
       }
 
       if (directWalkMeters <= 2500 || results.length === 0) {
         results.push({
-          id: 'itin-walk-only', type: 'walk_only', badge: '🚶 เดินเท้าตลอดสาย (พื้นที่นอกแนวรถ/ระยะใกล้)', score: directWalkMeters * 3.0, totalMinutes: estimateWalkMinutes(directWalkMeters), totalWalkMeters: directWalkMeters, transferCount: 0,
-          steps: [{ mode: 'walk', fromName: originPt.name, toName: destPt.name, fromCoord: [originPt.lat, originPt.lng], toCoord: [destPt.lat, destPt.lng], distanceMeters: directWalkMeters, durationMinutes: estimateWalkMinutes(directWalkMeters) }]
+          id: 'itin-walk-only',
+          type: 'walk_only',
+          badge: '🚶 เดินเท้าตลอดสาย (พื้นที่นอกแนวรถ/ระยะใกล้)',
+          score: directWalkMeters * 3.0,
+          totalMinutes: estimateWalkMinutes(directWalkMeters),
+          totalWalkMeters: directWalkMeters,
+          transferCount: 0,
+          steps: [
+            {
+              mode: 'walk',
+              fromName: originPt.name,
+              toName: destPt.name,
+              fromCoord: [originPt.lat, originPt.lng],
+              toCoord: [destPt.lat, destPt.lng],
+              distanceMeters: directWalkMeters,
+              durationMinutes: estimateWalkMinutes(directWalkMeters)
+            }
+          ]
         });
       }
+
       return results.sort((a, b) => a.score - b.score).slice(0, 5);
     }
 
     const SOI_KEYWORDS = ['ซอย', 'ตรอก', 'หมู่บ้าน', 'ซ.', 'soi', 'lane', 'alley'];
-    function isMinorSoiName(roadName = '') { const lower = String(roadName).toLowerCase(); return SOI_KEYWORDS.some(k => lower.includes(k)); }
+
+    function isMinorSoiName(roadName = '') {
+      const lower = String(roadName).toLowerCase();
+      return SOI_KEYWORDS.some(k => lower.includes(k));
+    }
 
     const callGeminiAPI = async (prompt, systemInstruction = "คุณคือผู้เชี่ยวชาญด้านการวางแผนระบบขนส่งมวลชน", asJson = false) => {
       const apiKey = ""; 
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-      const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], systemInstruction: { parts: [{ text: systemInstruction }] } };
-      if (asJson) { payload.generationConfig = { responseMimeType: "application/json" }; }
-      let retries = 3; let delay = 1000;
+      const payload = {
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        systemInstruction: { parts: [{ text: systemInstruction }] }
+      };
+      
+      if (asJson) {
+        payload.generationConfig = { responseMimeType: "application/json" };
+      }
+
+      let retries = 3;
+      let delay = 1000;
       while (retries > 0) {
         try {
-          const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
           const result = await response.json();
-          if (result.candidates && result.candidates[0].content.parts[0].text) return result.candidates[0].content.parts[0].text;
+          if (result.candidates && result.candidates[0].content.parts[0].text) {
+            return result.candidates[0].content.parts[0].text;
+          }
           throw new Error("Invalid response format");
         } catch (e) {
-          retries--; if (retries === 0) throw e;
-          await new Promise(res => setTimeout(res, delay)); delay *= 2;
+          retries--;
+          if (retries === 0) throw e;
+          await new Promise(res => setTimeout(res, delay));
+          delay *= 2;
         }
       }
     };
 
+    function calculateHaversineMeters(lat1, lon1, lat2, lon2) {
+      const nLat1 = Number(lat1);
+      const nLon1 = Number(lon1);
+      const nLat2 = Number(lat2);
+      const nLon2 = Number(lon2);
+      if (!Number.isFinite(nLat1) || !Number.isFinite(nLon1) || !Number.isFinite(nLat2) || !Number.isFinite(nLon2)) {
+        return 999999;
+      }
+      const R = 6371000;
+      const toRad = d => (d * Math.PI) / 180;
+      const dLat = toRad(nLat2 - nLat1);
+      const dLon = toRad(nLon2 - nLon1);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(nLat1)) * Math.cos(toRad(nLat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return Math.round(R * c);
+    }
+
     const PAO_LINE_20_RAW_STOPS = [
-      { code: '065', th: 'โรงเรียนดาราวิทยาลัย', en: 'Dara Academy', leg: 'green_outbound', lat: 18.79755, lng: 99.01082, roadSide: 'ริม ถ.แก้วนวรัฐ' },
-      { code: '066', th: 'โรงพยาบาลแมคคอร์มิค', en: 'McCormick Hospital', leg: 'green_outbound', lat: 18.79595, lng: 99.00745, roadSide: 'ริม ถ.แก้วนวรัฐ', pairCode: '115' },
-      { code: '067', th: 'โรงเรียนปรินส์รอยแยลส์วิทยาลัย', en: "The Prince Royal's College", leg: 'green_outbound', lat: 18.79415, lng: 99.00385, roadSide: 'ริม ถ.แก้วนวรัฐ', pairCode: '113/114' },
-      { code: '068', th: 'วัดเกตการาม', en: 'Wat Ket Karam', leg: 'green_outbound', lat: 18.79160, lng: 99.00280, roadSide: 'ริม ถ.เจริญราษฎร์' },
-      { code: '069', th: 'ถนนวิชยานนท์', en: 'Wichayanon Rd', leg: 'green_outbound', lat: 18.79055, lng: 98.99975, roadSide: 'ริม ถ.วิชยานนท์' },
-      { code: '070', th: 'ไนท์บาซาร์เชียงใหม่', en: 'Chiang Mai Night Bazaar', leg: 'green_outbound', lat: 18.78520, lng: 98.99990, roadSide: 'ริม ถ.ช้างคลาน' },
-      { code: '071', th: 'วัดศรีดอนไชย', en: 'Wat Si Don Chai', leg: 'green_outbound', lat: 18.78195, lng: 98.99785, roadSide: 'ริม ถ.ศรีดอนไชย' },
-      { code: '072', th: 'ศูนย์วัณโรคเขต 10', en: 'Tuberculosis Center Area 10', leg: 'green_outbound', lat: 18.78165, lng: 98.99450, roadSide: 'ริม ถ.ศรีดอนไชย' },
-      { code: '073', th: 'วัดพวกช้าง', en: 'Wat Puak Chang', leg: 'green_outbound', lat: 18.78180, lng: 98.99180, roadSide: 'ริมถนนใกล้แยกประตูเชียงใหม่' },
-      { code: '074', th: 'ถนนมูลเมือง 1', en: 'Mun Mueang Rd 1', leg: 'green_outbound', lat: 18.78485, lng: 98.99295, roadSide: 'ริม ถ.มูลเมือง ซอย 1' },
-      { code: '075', th: 'ถนนมูลเมือง 2', en: 'Mun Mueang Rd 2', leg: 'green_outbound', lat: 18.78815, lng: 98.99305, roadSide: 'ริม ถ.มูลเมือง' },
-      { code: '076', th: 'ธนาคารกสิกร สาขาถนนมูลเมือง', en: 'Kasikorn Bank, Moon Muang', leg: 'green_outbound', lat: 18.79150, lng: 98.99310, roadSide: 'ริม ถ.มูลเมือง' },
-      { code: '077', th: 'วัดเชียงมั่น', en: 'Wat Chiang Man', leg: 'green_outbound', lat: 18.79385, lng: 98.98925, roadSide: 'ริม ถ.ศรีภูมิ/ราชภาคินัย' },
-      { code: '078', th: 'วัดหม้อคำตวง', en: 'Wat Mo Kham Tuang', leg: 'green_outbound', lat: 18.79525, lng: 98.98595, roadSide: 'ริม ถ.ศรีภูมิ' },
-      { code: '079', th: 'ตลาดช้างเผือก', en: 'Chang Phuak Market', leg: 'green_outbound', lat: 18.79605, lng: 98.98625, roadSide: 'ริม ถ.ช้างเผือก' },
-      { code: '080', th: 'โรงเรียนโกวิทธำรงเชียงใหม่', en: 'Kowittamrong Chiangmai School', leg: 'green_outbound', lat: 18.79850, lng: 98.98620, roadSide: 'ริม ถ.ช้างเผือก' },
-      { code: '081', th: 'สถานีขนส่งเชียงใหม่แห่งที่ 1 (ช้างเผือก)', en: 'Chiang Mai Bus Terminal 1', leg: 'green_outbound', isTerminal: true, lat: 18.80055, lng: 98.98615, roadSide: 'ริม ถ.ช้างเผือก' },
-      { code: '082', th: 'โบราณสถานเจดีย์แดง (ขาไป)', en: 'Chedi Daeng Monument', leg: 'both_shared', lat: 18.80325, lng: 98.98625, roadSide: 'ริม ถ.ช้างเผือก', pairCode: '108' },
-      { code: '083', th: 'ตลาดศิริวัฒนา (กาดธานินทร์)', en: 'Siri Wattana Market', leg: 'green_outbound', lat: 18.80535, lng: 98.98635, roadSide: 'ริม ถ.ช้างเผือก' },
-      { code: '084', th: 'ม.ราชภัฏเชียงใหม่ (ขาไป)', en: 'Chiang Mai Rajabhat University', leg: 'both_shared', lat: 18.80765, lng: 98.98645, roadSide: 'ริม ถ.ช้างเผือก', pairCode: '107' },
-      { code: '085', th: 'โรงเรียนวัดข่วงสิงห์', en: 'Wat Khuang Sing School', leg: 'green_outbound', lat: 18.81160, lng: 98.98615, roadSide: 'ริม ถ.โชตนา', pairCode: '105/106' },
-      { code: '086', th: 'ตลาดสดบริบูรณ์', en: 'Boriboon Food Market', leg: 'green_outbound', lat: 18.81380, lng: 98.98540, roadSide: 'ริม ถ.โชตนา' },
-      { code: '087', th: 'สถานีตำรวจภูธร ช้างเผือก (ขาไป)', en: 'Chang Phueak Police Station', leg: 'green_outbound', lat: 18.81685, lng: 98.98395, roadSide: 'ริม ถ.โชตนา', pairCode: '104' },
-      { code: '088', th: 'ศูนย์ประชุมแสดงสินค้า ประตู 5', en: 'CMECC Gate 5', leg: 'green_outbound', lat: 18.82450, lng: 98.96980, roadSide: 'ริม ถ.เลียบคลองชลประทาน' },
-      { code: '089', th: 'ศูนย์ประชุมแสดงสินค้า (ขาไป)', en: 'CMECC', leg: 'green_outbound', lat: 18.82710, lng: 98.96920, roadSide: 'ริมถนนด้านหน้าศูนย์ประชุม', pairCode: '102' },
-      { code: '090', th: 'ศูนย์สินค้าเกษตรภาคเหนือ', en: 'Chiang Mai Farmers Council', leg: 'green_outbound', lat: 18.83020, lng: 98.96950, roadSide: 'ริม ถ.เลียบคลองชลประทาน' },
-      { code: '091', th: 'บ้านพักข้าราชการเชียงใหม่', en: 'Government Officials Residences', leg: 'green_outbound', lat: 18.83280, lng: 98.97080, roadSide: 'ริมถนนโซนบ้านพักข้าราชการ' },
-      { code: '092', th: 'ศาลอาญาภาค 5', en: 'Criminal Court Region 5', leg: 'green_outbound', lat: 18.83510, lng: 98.97180, roadSide: 'ริมถนนหน้าศาล' },
-      { code: '093', th: 'สำนักงานอุตสาหกรรมเชียงใหม่', en: 'Provincial Industry Office', leg: 'green_outbound', lat: 18.83680, lng: 98.97220, roadSide: 'ริมถนนหน้าสำนักงาน' },
-      { code: '094', th: 'ศูนย์ราชการจังหวัดเชียงใหม่', en: 'Government Center', leg: 'both_shared', lat: 18.83900, lng: 98.97180, roadSide: 'หน้าศูนย์ราชการ' },
-      { code: '095', th: 'โรงพยาบาลนครพิงค์', en: 'Nakornping Hospital', leg: 'green_outbound', lat: 18.85420, lng: 98.96850, roadSide: 'หน้าโรงพยาบาลนครพิงค์' },
-      { code: '096', th: 'วิทยาลัยพยาบาลบรมราชชนนี', en: 'Nursing College', leg: 'green_outbound', lat: 18.85620, lng: 98.96790, roadSide: 'หน้าวิทยาลัย' },
-      { code: '097', th: 'ศูนย์ส่งเสริมพัฒนาการเด็ก', en: 'Child Development Center', leg: 'green_outbound', lat: 18.85880, lng: 98.96710, roadSide: 'จุดเหนือสุดก่อนวนกลับ' },
-      { code: '098', th: 'โรงเรียนนวมินทราชูทิศ พายัพ', en: 'Navamindarajudis School', leg: 'green_outbound', lat: 18.84580, lng: 98.96980, roadSide: 'ริมถนนหน้าโรงเรียน' },
-      { code: '099', th: 'สำนักงานอธิบดีผู้พิพากษาภาค 5', en: 'Chief Judge Office', leg: 'both_shared', lat: 18.84120, lng: 98.97280, roadSide: 'สำนักงานอธิบดี' },
-      { code: '100', th: 'สวนเฉลิมพระเกียรติฯ อบจ.เชียงใหม่', en: 'PAO Park', leg: 'both_shared', isTerminal: true, lat: 18.83650, lng: 98.97520, roadSide: 'สถานีหลัก สวน อบจ.' },
-      { code: '101', th: 'สำนักคลังเขต 5', en: 'Treasury Department', leg: 'red_inbound', lat: 18.83580, lng: 98.97350, roadSide: 'สำนักคลังเขต 5' },
-      { code: '102', th: 'ศูนย์ประชุมแสดงสินค้า (ขากลับ)', en: 'CMECC (Inbound)', leg: 'red_inbound', lat: 18.82725, lng: 98.96985, roadSide: 'ฝั่งตรงข้ามศูนย์ประชุม', pairCode: '089' },
-      { code: '103', th: 'ตลาดหนองฮ่อ', en: 'Nong Ho Market', leg: 'red_inbound', lat: 18.82180, lng: 98.97650, roadSide: 'หน้าตลาดหนองฮ่อ' },
-      { code: '104', th: 'สถานีตำรวจภูธร ช้างเผือก (ขากลับ)', en: 'Police Station (Inbound)', leg: 'red_inbound', lat: 18.81675, lng: 98.98440, roadSide: 'ตรงข้าม สภ.ช้างเผือก', pairCode: '087' },
-      { code: '105', th: 'ธนาคารกรุงไทย ข่วงสิงห์', en: 'Krungthai Bank', leg: 'red_inbound', lat: 18.81240, lng: 98.98665, roadSide: 'หน้า ธ.กรุงไทย', pairCode: '085' },
-      { code: '106', th: 'ธนาคารธนชาต ข่วงสิงห์', en: 'TTB Bank', leg: 'red_inbound', lat: 18.81090, lng: 98.98670, roadSide: 'หน้า TTB', pairCode: '085' },
-      { code: '107', th: 'ม.ราชภัฏเชียงใหม่ (ขากลับ)', en: 'Rajabhat University', leg: 'both_shared', lat: 18.80755, lng: 98.98685, roadSide: 'ตรงข้าม ม.ราชภัฏฯ', pairCode: '084' },
-      { code: '108', th: 'โบราณสถานเจดีย์แดง (ขากลับ)', en: 'Chedi Daeng', leg: 'both_shared', lat: 18.80315, lng: 98.98665, roadSide: 'หน้าเจดีย์แดง', pairCode: '082' },
-      { code: '109', th: 'วัดเชียงยืน', en: 'Wat Chiang Yeun', leg: 'red_inbound', lat: 18.79640, lng: 98.98880, roadSide: 'หน้าวัดเชียงยืน' },
-      { code: '110', th: 'วัดป่าเป้า', en: 'Wat Pa Pao', leg: 'red_inbound', lat: 18.79630, lng: 98.99220, roadSide: 'หน้าวัดป่าเป้า' },
-      { code: '111', th: 'ถนนช้างม่อย 3', en: 'Chang Moi Rd 3', leg: 'red_inbound', lat: 18.79080, lng: 98.99620, roadSide: 'ถ.ช้างม่อย' },
-      { code: '112', th: 'ถนนท้ายวัง', en: 'Tai Wang Rd', leg: 'red_inbound', lat: 18.78980, lng: 98.99990, roadSide: 'ถ.ท้ายวัง' },
-      { code: '113', th: 'โรงเรียนปรินส์รอยแยลส์วิทยาลัย 1', en: "PRC 1 (Inbound)", leg: 'red_inbound', lat: 18.79370, lng: 99.00340, roadSide: 'ตรงข้าม รร.ปรินส์ฯ', pairCode: '067' },
-      { code: '114', th: 'โรงเรียนปรินส์รอยแยลส์วิทยาลัย 2', en: "PRC 2 (Inbound)", leg: 'red_inbound', lat: 18.79455, lng: 99.00490, roadSide: 'ตรงข้าม รร.ปรินส์ฯ', pairCode: '067' },
-      { code: '115', th: 'โรงพยาบาลแมคคอร์มิค (ขากลับ)', en: 'McCormick (Inbound)', leg: 'red_inbound', lat: 18.79560, lng: 99.00765, roadSide: 'หน้า รพ.แมคคอร์มิค', pairCode: '066' }
-    ];
-
-    const PAO_LINE_18_RAW_STOPS = [
-      { code: '001', th: 'สถานีขนส่งอาเขต แห่งที่ 2', en: 'Arcade Terminal 2', leg: 'orange_outbound', isTerminal: true, lat: 18.79990, lng: 99.01760, roadSide: 'สถานีขนส่งอาเขต' },
-      { code: '002', th: 'สมาคมพาณิชย์สามัคคีเชียงใหม่', en: 'Samakee Association', leg: 'orange_outbound', lat: 18.79320, lng: 99.01680, roadSide: 'ริม ถ.ทุ่งโฮเต็ล', pairCode: '064' },
-      { code: '003', th: 'อุตสาหกรรมภาคเหนือ', en: 'Industrial Promotion Center', leg: 'orange_outbound', lat: 18.78850, lng: 99.01620, roadSide: 'ริม ถ.ทุ่งโฮเต็ล', pairCode: '063' },
-      { code: '004', th: 'สถานีรถไฟเชียงใหม่', en: 'Railway Station', leg: 'orange_outbound', lat: 18.78440, lng: 99.01650, roadSide: 'หน้าสถานีรถไฟ', pairCode: '062' },
-      { code: '005', th: 'ถนนเจริญเมือง 1', en: 'Charoen Muang Rd 1', leg: 'orange_outbound', lat: 18.78580, lng: 99.01210, roadSide: 'ริม ถ.เจริญเมือง' },
-      { code: '006', th: 'ตลาดสันป่าข่อย (ขาไป)', en: 'Sanpakhoi Market', leg: 'orange_outbound', lat: 18.78660, lng: 99.00820, roadSide: 'หน้าตลาดสันป่าข่อย', pairCode: '060' },
-      { code: '007', th: 'ธนาคารธนชาต สันป่าข่อย', en: 'TTB Bank', leg: 'orange_outbound', lat: 18.78710, lng: 99.00520, roadSide: 'ริม ถ.เจริญเมือง' },
-      { code: '008', th: 'ถนนท่าแพ สะพานนวรัฐ', en: 'Tha Phae Rd', leg: 'both_shared', lat: 18.78760, lng: 99.00050, roadSide: 'เชิงสะพานนวรัฐ' },
-      { code: '009', th: 'วัดบุพพาราม', en: 'Wat Buppharam', leg: 'orange_outbound', lat: 18.78775, lng: 98.99810, roadSide: 'หน้าวัดบุพพาราม' },
-      { code: '010', th: 'ประตูท่าแพ 1', en: 'Tha Phae Gate 1', leg: 'orange_outbound', lat: 18.78785, lng: 98.99420, roadSide: 'ก่อนถึงประตูท่าแพ' },
-      { code: '011', th: 'ประตูท่าแพ 2', en: 'Tha Phae Gate 2', leg: 'both_shared', lat: 18.78790, lng: 98.99320, roadSide: 'หน้าประตูท่าแพ' },
-      { code: '012', th: 'วัดพันอ้น', en: 'Wat Phan On', leg: 'orange_outbound', lat: 18.78795, lng: 98.99080, roadSide: 'หน้าวัดพันอ้น' },
-      { code: '013', th: 'พิพิธภัณฑ์ธนารักษ์ (ขาไป)', en: 'Treasury Museum', leg: 'orange_outbound', lat: 18.78820, lng: 98.98760, roadSide: 'หน้าพิพิธภัณฑ์ธนารักษ์', pairCode: '052' },
-      { code: '014', th: 'สถานีตำรวจภูธรเมืองเชียงใหม่ (ขาไป)', en: 'Police Station', leg: 'orange_outbound', lat: 18.78835, lng: 98.98520, roadSide: 'หน้า สภ.เมือง', pairCode: '051' },
-      { code: '015', th: 'วัดพระสิงห์ วรมหาวิหาร (ขาไป)', en: 'Wat Phra Singh', leg: 'orange_outbound', lat: 18.78855, lng: 98.98250, roadSide: 'หน้าวัดพระสิงห์', pairCode: '050' },
-      { code: '016', th: 'โรงเรียนหอพระ (ขาไป)', en: 'Horpra School', leg: 'orange_outbound', lat: 18.79010, lng: 98.98210, roadSide: 'หน้า รร.หอพระ', pairCode: '049' },
-      { code: '017', th: 'ถนนสิงหราช', en: 'Singharat Rd', leg: 'both_shared', lat: 18.79280, lng: 98.98190, roadSide: 'ริม ถ.สิงหราช' },
-      { code: '018', th: 'ถนนอารักษ์ 1', en: 'Arak Rd 1', leg: 'orange_outbound', lat: 18.79180, lng: 98.97815, roadSide: 'ริม ถ.อารักษ์' },
-      { code: '019', th: 'ถนนอารักษ์ 2', en: 'Arak Rd 2', leg: 'orange_outbound', lat: 18.78990, lng: 98.97815, roadSide: 'ริม ถ.อารักษ์' },
-      { code: '020', th: 'โรงเรียนสอนคนตาบอดภาคเหนือ', en: 'School for the Blind', leg: 'orange_outbound', lat: 18.78840, lng: 98.97760, roadSide: 'หน้า รร.สอนคนตาบอด' },
-      { code: '021', th: 'หอสมุดแห่งชาติเชียงใหม่', en: 'National Library', leg: 'orange_outbound', lat: 18.78860, lng: 98.97560, roadSide: 'หน้าหอสมุดแห่งชาติฯ' },
-      { code: '022', th: 'โรงพยาบาลมหาราชนครเชียงใหม่ (ขาไป)', en: 'Maharaj Hospital', leg: 'both_shared', lat: 18.78915, lng: 98.97380, roadSide: 'หน้ารพ.มหาราช', pairCode: '045' },
-      { code: '023', th: 'ศูนย์ความเป็นเลิศทางการแพทย์ (ขาไป)', en: 'Medical Excellence', leg: 'both_shared', lat: 18.78930, lng: 98.97120, roadSide: 'หน้าศูนย์ความเป็นเลิศฯ', pairCode: '044' },
-      { code: '024', th: 'วัดสวนดอก', en: 'Wat Suan Dok', leg: 'both_shared', lat: 18.78890, lng: 98.96820, roadSide: 'หน้าวัดสวนดอก' },
-      { code: '025', th: 'คณะเภสัชฯ มช.', en: 'Pharmacy CMU', leg: 'both_shared', lat: 18.78945, lng: 98.96480, roadSide: 'หน้าคณะเภสัชฯ', pairCode: '042' },
-      { code: '026', th: 'ตลาดสุเทพ (ต้นพยอม ขาไป)', en: 'Ton Phayom Market', leg: 'orange_outbound', lat: 18.78975, lng: 98.96190, roadSide: 'หน้าตลาดต้นพยอม', pairCode: '040' },
-      { code: '027', th: 'ประตู ปตท. ม.เชียงใหม่', en: 'PTT Station CMU', leg: 'orange_outbound', lat: 18.79320, lng: 98.96050, roadSide: 'เลียบคันคลอง' },
-      { code: '028', th: 'ถนนห้วยแก้ว 1', en: 'Huay Kaew Rd 1', leg: 'both_shared', lat: 18.80250, lng: 98.96220, roadSide: 'ริม ถ.ห้วยแก้ว' },
-      { code: '029', th: 'มหาวิทยาลัยเชียงใหม่', en: 'Chiang Mai University', leg: 'orange_outbound', lat: 18.80750, lng: 98.95480, roadSide: 'หน้า มช.' },
-      { code: '030', th: 'ม.เทคโนโลยีราชมงคลล้านนา (ขาไป)', en: 'RMUTL', leg: 'orange_outbound', lat: 18.80980, lng: 98.95150, roadSide: 'หน้า มทร.ล้านนา', pairCode: '035' },
-      { code: '031', th: 'สวนสัตว์เชียงใหม่', en: 'Chiang Mai Zoo', leg: 'orange_outbound', lat: 18.81060, lng: 98.94780, roadSide: 'หน้าสวนสัตว์เชียงใหม่' },
-      { code: '032', th: 'อนุสาวรีย์ครูบาศรีวิชัย', en: 'Kruba Srivichai Monument', leg: 'both_shared', isTerminal: true, lat: 18.81240, lng: 98.94550, roadSide: 'หน้าอนุสาวรีย์' },
-      { code: '033', th: 'สำนักงานปศุสัตว์เชียงใหม่', en: 'Livestock Office', leg: 'blue_inbound', lat: 18.81090, lng: 98.94950, roadSide: 'ริม ถ.ห้วยแก้ว' },
-      { code: '034', th: 'สถานีตำรวจภูธรภูพิงคราชนิเวศน์', en: 'Bhubing Police', leg: 'blue_inbound', lat: 18.81020, lng: 98.95080, roadSide: 'หน้า สภ.ภูพิงคฯ' },
-      { code: '035', th: 'ม.เทคโนโลยีราชมงคลล้านนา (ขากลับ)', en: 'RMUTL (Inbound)', leg: 'blue_inbound', lat: 18.80950, lng: 98.95190, roadSide: 'ตรงข้าม มทร.ล้านนา', pairCode: '030' },
-      { code: '036', th: 'กาดหน้ามอ', en: 'Kad Na Mor Market', leg: 'blue_inbound', lat: 18.80720, lng: 98.95580, roadSide: 'หน้ากาดหน้ามอ' },
-      { code: '037', th: 'สวนเจ็ดริน', en: 'Seven Fountains', leg: 'blue_inbound', lat: 18.80510, lng: 98.96020, roadSide: 'หน้าสวนเจ็ดริน' },
-      { code: '038', th: 'แยกภูคำ', en: 'Phucome Intersection', leg: 'both_shared', lat: 18.80350, lng: 98.96150, roadSide: 'ใกล้สี่แยกภูคำ' },
-      { code: '039', th: 'ประเสริฐแลนด์ (กาดเชิงดอย)', en: 'Prasert Land', leg: 'blue_inbound', lat: 18.79750, lng: 98.96160, roadSide: 'หน้าประเสริฐแลนด์' },
-      { code: '040', th: 'ตลาดสุเทพ (ต้นพยอม ขากลับ)', en: 'Ton Phayom Market', leg: 'blue_inbound', lat: 18.79010, lng: 98.96210, roadSide: 'ฝั่งตลาดต้นพยอม', pairCode: '026' },
-      { code: '041', th: 'หอนิทรรศการศิลปวัฒนธรรม มช.', en: 'CMU Art Center', leg: 'both_shared', lat: 18.79005, lng: 98.96410, roadSide: 'หน้าหอศิลป์ มช.' },
-      { code: '042', th: 'คณะเภสัชศาสตร์ ม.เชียงใหม่', en: 'Pharmacy CMU', leg: 'both_shared', lat: 18.78975, lng: 98.96520, roadSide: 'หน้าคณะเภสัชฯ', pairCode: '025' },
-      { code: '043', th: 'คณะทันตแพทยศาสตร์ ม.เชียงใหม่', en: 'Dentistry CMU', leg: 'both_shared', lat: 18.78965, lng: 98.96750, roadSide: 'หน้าคณะทันตแพทย์' },
-      { code: '044', th: 'ศูนย์ความเป็นเลิศทางการแพทย์ (ขากลับ)', en: 'Medical Excellence', leg: 'both_shared', lat: 18.78955, lng: 98.97140, roadSide: 'ฝั่งขาเข้าเมือง', pairCode: '023' },
-      { code: '045', th: 'โรงพยาบาลมหาราชนครเชียงใหม่ (ขากลับ)', en: 'Maharaj Hospital', leg: 'both_shared', lat: 18.78945, lng: 98.97410, roadSide: 'ตรงข้าม รพ.มหาราช', pairCode: '022' },
-      { code: '046', th: 'โรงพยาบาลเชียงใหม่ ราม', en: 'Chiangmai Ram Hospital', leg: 'blue_inbound', lat: 18.79240, lng: 98.97740, roadSide: 'หน้ารพ.เชียงใหม่ราม' },
-      { code: '047', th: 'คอมพิวเตอร์ พลาซ่า', en: 'Computer Plaza', leg: 'blue_inbound', lat: 18.79580, lng: 98.97820, roadSide: 'หน้าคอมพิวเตอร์พลาซ่า' },
-      { code: '048', th: 'วัดราชมณเฑียร', en: 'Wat Rajamontean', leg: 'both_shared', lat: 18.79595, lng: 98.98180, roadSide: 'หน้าวัดราชมณเฑียร' },
-      { code: '049', th: 'โรงเรียนหอพระ (ขากลับ)', en: 'Horpra School', leg: 'blue_inbound', lat: 18.79030, lng: 98.98240, roadSide: 'ฝั่งขากลับ', pairCode: '016' },
-      { code: '050', th: 'วัดพระสิงห์ วรมหาวิหาร (ขากลับ)', en: 'Wat Phra Singh', leg: 'blue_inbound', lat: 18.78870, lng: 98.98280, roadSide: 'หน้าวัดพระสิงห์', pairCode: '015' },
-      { code: '051', th: 'สถานีตำรวจภูธรเมืองเชียงใหม่ (ขากลับ)', en: 'Police Station', leg: 'blue_inbound', lat: 18.78855, lng: 98.98540, roadSide: 'ตรงข้าม สภ.เมือง', pairCode: '014' },
-      { code: '052', th: 'พิพิธภัณฑ์ธนารักษ์ (ขากลับ)', en: 'Treasury Museum', leg: 'blue_inbound', lat: 18.78840, lng: 98.98780, roadSide: 'ตรงข้ามพิพิธภัณฑ์', pairCode: '013' },
-      { code: '053', th: 'วัดหมื่นล้าน', en: 'Wat Muen Lan', leg: 'blue_inbound', lat: 18.78810, lng: 98.99190, roadSide: 'หน้าวัดหมื่นล้าน' },
-      { code: '054', th: 'ถนนมูลเมือง 1 (เชื่อมสาย 20)', en: 'Moon Muang Rd 1', leg: 'both_shared', lat: 18.78920, lng: 98.99310, roadSide: 'เชื่อมสาย 18 และ 20' },
-      { code: '055', th: 'ถนนช้างม่อย 1', en: 'Chang Moi Rd 1', leg: 'both_shared', lat: 18.79095, lng: 98.99450, roadSide: 'ช่วงต้นถนนช้างม่อย' },
-      { code: '056', th: 'ถนนช้างม่อย 2', en: 'Chang Moi Rd 2', leg: 'blue_inbound', lat: 18.79085, lng: 98.99680, roadSide: 'ก่อนถึงกาดหลวง' },
-      { code: '057', th: 'ตลาดวโรรส (กาดหลวง)', en: 'Waroros Market', leg: 'both_shared', lat: 18.79030, lng: 98.99940, roadSide: 'หน้าตลาดวโรรส' },
-      { code: '058', th: 'โรงเรียนคำเที่ยงอนุสรณ์', en: 'Khamthiang School', leg: 'both_shared', lat: 18.78810, lng: 99.00280, roadSide: 'เชิงสะพานนวรัฐ' },
-      { code: '059', th: 'ถนนเจริญเมือง 2', en: 'Charoen Muang Rd 2', leg: 'blue_inbound', lat: 18.78730, lng: 99.00580, roadSide: 'ฝั่งขาออก' },
-      { code: '060', th: 'ตลาดสันป่าข่อย (ขากลับ)', en: 'Sanpakhoi Market', leg: 'blue_inbound', lat: 18.78680, lng: 99.00850, roadSide: 'ตรงข้ามตลาดสันป่าข่อย', pairCode: '006' },
-      { code: '061', th: 'ถนนเจริญเมือง 3', en: 'Charoen Muang Rd 3', leg: 'blue_inbound', lat: 18.78600, lng: 99.01240, roadSide: 'ก่อนถึงแยกสถานีรถไฟ' },
-      { code: '062', th: 'สวนสาธารณะรถไฟ', en: 'Railway Park', leg: 'blue_inbound', lat: 18.78510, lng: 99.01580, roadSide: 'หน้าสวนสาธารณะรถไฟ', pairCode: '004' },
-      { code: '063', th: 'อุตสาหกรรมภาคเหนือ (ขากลับ)', en: 'Industrial Promotion (Inbound)', leg: 'blue_inbound', lat: 18.78870, lng: 99.01650, roadSide: 'ฝั่งกลับเข้าอาเขต', pairCode: '003' },
-      { code: '064', th: 'สมาคมพาณิชย์สามัคคีเชียงใหม่ (ขากลับ)', en: 'Samakee Association', leg: 'blue_inbound', lat: 18.79340, lng: 99.01710, roadSide: 'ก่อนเข้าอาเขต', pairCode: '002' }
-    ];
-
-    function buildInitialStopsMap() {
-      const map = {
-        'stop-arcade-bus-terminal': { id: 'stop-arcade-bus-terminal', code: 'ARC', name: '[ARC] สถานีขนส่งเชียงใหม่ แห่งที่ 3', station_level: 'at_grade', isTerminal: true, latitude: 18.80065, longitude: 99.01815 },
-        'stop-lrt-01-nakornping': { id: 'stop-lrt-01-nakornping', code: 'LRT-01', name: '[LRT-01] สถานี รพ.นครพิงค์', station_level: 'at_grade', latitude: 18.85435, longitude: 98.96835 },
-        'stop-lrt-02-gov-center': { id: 'stop-lrt-02-gov-center', code: 'LRT-02', name: '[LRT-02] สถานีศูนย์ราชการเชียงใหม่', station_level: 'at_grade', latitude: 18.83910, longitude: 98.97195 },
-        'stop-lrt-03-cmecc': { id: 'stop-lrt-03-cmecc', code: 'LRT-03', name: '[LRT-03] สถานีศูนย์ประชุมนานาชาติฯ', station_level: 'at_grade', latitude: 18.82718, longitude: 98.96950 },
-        'stop-lrt-04-khuang-sing': { id: 'stop-lrt-04-khuang-sing', code: 'LRT-04', name: '[LRT-04] สถานีแยกข่วงสิงห์', station_level: 'elevated', latitude: 18.81195, longitude: 98.98635 },
-        'stop-lrt-05-cmru': { id: 'stop-lrt-05-cmru', code: 'LRT-05', name: '[LRT-05] สถานี ม.ราชภัฏเชียงใหม่', station_level: 'elevated', latitude: 18.80760, longitude: 98.98665 },
-        'stop-lrt-06-chang-phueak-bus': { id: 'stop-lrt-06-chang-phueak-bus', code: 'LRT-06', name: '[LRT-06] สถานีขนส่งช้างเผือก', station_level: 'underground', latitude: 18.80060, longitude: 98.98630 },
-        'stop-lrt-07-chang-phueak-gate': { id: 'stop-lrt-07-chang-phueak-gate', code: 'LRT-07', name: '[LRT-07] สถานีประตูช้างเผือก', station_level: 'underground', latitude: 18.79565, longitude: 98.98610 },
-        'stop-lrt-08-suan-dok-hosp': { id: 'stop-lrt-08-suan-dok-hosp', code: 'LRT-08', name: '[LRT-08] สถานี รพ.มหาราช (สวนดอก)', station_level: 'underground', latitude: 18.78925, longitude: 98.97395 },
-        'stop-lrt-09-cnx-airport': { id: 'stop-lrt-09-cnx-airport', code: 'LRT-09', name: '[LRT-09] สถานีสนามบินเชียงใหม่', station_level: 'underground', latitude: 18.76775, longitude: 98.96485 },
-        'stop-lrt-10-central-airport': { id: 'stop-lrt-10-central-airport', code: 'LRT-10', name: '[LRT-10] สถานีเซ็นทรัลแอร์พอร์ต', station_level: 'elevated', latitude: 18.76895, longitude: 98.97560 },
-        'stop-lrt-11-mae-hia': { id: 'stop-lrt-11-mae-hia', code: 'LRT-11', name: '[LRT-11] สถานีแม่เหียะ / หางดง', station_level: 'at_grade', latitude: 18.74620, longitude: 98.96310 }
+      { code: '065', th: 'โรงเรียนดาราวิทยาลัย', en: 'Dara Academy', leg: 'green_outbound', lat: 18.79755, lng: 99.01082, roadSide: 'ริม ถ.แก้วนวรัฐ (ฝั่งซ้ายขาเข้าเมือง หน้า รร.ดาราฯ)' },
+      { code: '066', th: 'โรงพยาบาลแมคคอร์มิค', en: 'McCormick Hospital', leg: 'green_outbound', lat: 18.79595, lng: 99.00745, roadSide: 'ริม ถ.แก้วนวรัฐ (ฝั่งขาเข้าเมือง ตรงข้าม รพ.แมคคอร์มิค)', pairCode: '115' },
+      { code: '067', th: 'โรงเรียนปรินส์รอยแยลส์วิทยาลัย', en: "The Prince Royal's College", leg: 'green_outbound', lat: 18.79415, lng: 99.00385, roadSide: 'ริม ถ.แก้วนวรัฐ (ฝั่งหน้า รร.ปรินส์ฯ ขาเข้าเมือง)', pairCode: '113/114' },
+      { code: '068', th: 'วัดเกตการาม', en: 'Wat Ket Karam', leg: 'green_outbound', lat: 18.79160, lng: 99.00280, roadSide: 'ริม ถ.เจริญราษฎร์ (ฝั่งวัดเกตการาม)' },
+      { code: '069', th: 'ถนนวิชยานนท์', en: 'Wichayanon Rd', leg: 'green_outbound', lat: 18.79055, lng: 98.99975, roadSide: 'ริม ถ.วิชยานนท์ (โซนกาดหลวง/ตลาดเมืองใหม่)' },
+      { code: '070', th: 'ไนท์บาซาร์เชียงใหม่', en: 'Chiang Mai Night Bazaar', leg: 'green_outbound', lat: 18.78520, lng: 98.99990, roadSide: 'ริม ถ.ช้างคลาน (ฝั่งไนท์บาซาร์ ขามุ่งหน้าทิศใต้)' },
+      { code: '071', th: 'วัดศรีดอนไชย', en: 'Wat Si Don Chai', leg: 'green_outbound', lat: 18.78195, lng: 98.99785, roadSide: 'ริม ถ.ศรีดอนไชย (ฝั่งหน้าวัดศรีดอนไชย)' },
+      { code: '072', th: 'ศูนย์วัณโรคเขต 10', en: 'Tuberculosis Center Area 10', leg: 'green_outbound', lat: 18.78165, lng: 98.99450, roadSide: 'ริม ถ.ศรีดอนไชย (หน้าศูนย์วัณโรคเขต 10)' },
+      { code: '073', th: 'วัดพวกช้าง', en: 'Wat Puak Chang', leg: 'green_outbound', lat: 18.78180, lng: 98.99180, roadSide: 'ริมถนนใกล้แยกประตูเชียงใหม่ (หน้าวัดพวกช้าง)' },
+      { code: '074', th: 'ถนนมูลเมือง 1', en: 'Mun Mueang Rd 1', leg: 'green_outbound', lat: 18.78485, lng: 98.99295, roadSide: 'ริม ถ.มูลเมือง ซอย 1 (ด้านในคูเมือง วันเวย์ขึ้นเหนือ)' },
+      { code: '075', th: 'ถนนมูลเมือง 2', en: 'Mun Mueang Rd 2', leg: 'green_outbound', lat: 18.78815, lng: 98.99305, roadSide: 'ริม ถ.มูลเมือง ช่วงประตูท่าแพ (ด้านในคูเมือง)' },
+      { code: '076', th: 'ธนาคารกสิกร สาขาถนนมูลเมือง', en: 'Kasikorn Bank, Moon Muang', leg: 'green_outbound', lat: 18.79150, lng: 98.99310, roadSide: 'ริม ถ.มูลเมือง เหนือประตูท่าแพ (ด้านในคูเมือง)' },
+      { code: '077', th: 'วัดเชียงมั่น', en: 'Wat Chiang Man', leg: 'green_outbound', lat: 18.79385, lng: 98.98925, roadSide: 'ริม ถ.ศรีภูมิ/ราชภาคินัย ใกล้หน้าวัดเชียงมั่น' },
+      { code: '078', th: 'วัดหม้อคำตวง', en: 'Wat Mo Kham Tuang', leg: 'green_outbound', lat: 18.79525, lng: 98.98595, roadSide: 'ริม ถ.ศรีภูมิ ด้านในคูเมือง ก่อนออกประตูช้างเผือก' },
+      { code: '079', th: 'ตลาดช้างเผือก', en: 'Chang Phuak Market', leg: 'green_outbound', lat: 18.79605, lng: 98.98625, roadSide: 'ริม ถ.ช้างเผือก (ฝั่งซ้ายขาออกเมือง หน้าตลาดช้างเผือก)' },
+      { code: '080', th: 'โรงเรียนโกวิทธำรงเชียงใหม่', en: 'Kowittamrong Chiangmai School', leg: 'green_outbound', lat: 18.79850, lng: 98.98620, roadSide: 'ริม ถ.ช้างเผือก (ฝั่งซ้ายขาออกเมือง หน้า รร.โกวิทธำรง)' },
+      { code: '081', th: 'สถานีขนส่งเชียงใหม่แห่งที่ 1 (ช้างเผือก)', en: 'Chiang Mai Bus Terminal 1 (Chang Phueak)', leg: 'green_outbound', isTerminal: true, lat: 18.80055, lng: 98.98615, roadSide: 'ริม ถ.ช้างเผือก (หน้าสถานีขนส่งช้างเผือก)' },
+      { code: '082', th: 'โบราณสถานเจดีย์แดง (ขาไป)', en: 'Chedi Daeng Monument (Outbound)', leg: 'both_shared', lat: 18.80325, lng: 98.98625, roadSide: 'ริม ถ.ช้างเผือก (ฝั่งซ้ายขาออกเมือง)', pairCode: '108' },
+      { code: '083', th: 'ตลาดศิริวัฒนา (กาดธานินทร์)', en: 'Siri Wattana Market', leg: 'green_outbound', lat: 18.80535, lng: 98.98635, roadSide: 'ริม ถ.ช้างเผือก (ฝั่งซ้าย หน้าตลาดธานินทร์)' },
+      { code: '084', th: 'ม.ราชภัฏเชียงใหม่ (ขาไป)', en: 'Chiang Mai Rajabhat University (Outbound)', leg: 'both_shared', lat: 18.80765, lng: 98.98645, roadSide: 'ริม ถ.ช้างเผือก (ฝั่งซ้าย หน้า ม.ราชภัฏเชียงใหม่)', pairCode: '107' },
+      { code: '085', th: 'โรงเรียนวัดข่วงสิงห์', en: 'Wat Khuang Sing School', leg: 'green_outbound', lat: 18.81160, lng: 98.98615, roadSide: 'ริม ถ.โชตนา (ฝั่งซ้ายขาออกเมือง เหนือแยกข่วงสิงห์)', pairCode: '105/106' },
+      { code: '086', th: 'ตลาดสดบริบูรณ์', en: 'Boriboon Food Market', leg: 'green_outbound', lat: 18.81380, lng: 98.98540, roadSide: 'ริม ถ.โชตนา (ฝั่งซ้ายขาออกเมือง หน้าตลาดบริบูรณ์)' },
+      { code: '087', th: 'สถานีตำรวจภูธร ช้างเผือก (ขาไป)', en: 'Chang Phueak Police Station (Outbound)', leg: 'green_outbound', lat: 18.81685, lng: 98.98395, roadSide: 'ริม ถ.โชตนา (ฝั่งซ้ายขาออกเมือง หน้า สภ.ช้างเผือก)', pairCode: '104' },
+      { code: '088', th: 'ศูนย์ประชุมแสดงสินค้า ประตู 5', en: 'CMECC Gate 5', leg: 'green_outbound', lat: 18.82450, lng: 98.96980, roadSide: 'ริม ถ.เลียบคลองชลประทาน หน้าประตู 5 ศูนย์ประชุมฯ' },
+      { code: '089', th: 'ศูนย์ประชุมแสดงสินค้า (ขาไป)', en: 'CMECC (Outbound)', leg: 'green_outbound', lat: 18.82710, lng: 98.96920, roadSide: 'ริมถนนด้านหน้าศูนย์ประชุมและแสดงสินค้านานาชาติฯ', pairCode: '102' },
+      { code: '090', th: 'ศูนย์สินค้าเกษตรภาคเหนือ', en: 'Chiang Mai Farmers Council', leg: 'green_outbound', lat: 18.83020, lng: 98.96950, roadSide: 'ริม ถ.เลียบคลองชลประทาน หน้าศูนย์สินค้าเกษตรภาคเหนือ' },
+      { code: '091', th: 'บ้านพักข้าราชการเชียงใหม่', en: "Government Officials' Residences", leg: 'green_outbound', lat: 18.83280, lng: 98.97080, roadSide: 'ริมถนนโซนบ้านพักข้าราชการจังหวัดเชียงใหม่' },
+      { code: '092', th: 'ศาลอาญาภาค 5', en: 'Criminal Court Region 5', leg: 'green_outbound', lat: 18.83510, lng: 98.97180, roadSide: 'ริมถนนหน้าศาลอาญาทุจริตและประพฤติมิชอบภาค 5' },
+      { code: '093', th: 'สำนักงานอุตสาหกรรมเชียงใหม่', en: 'Chiangmai Provincial Industry Office', leg: 'green_outbound', lat: 18.83680, lng: 98.97220, roadSide: 'ริมถนนหน้าสำนักงานอุตสาหกรรมจังหวัดเชียงใหม่' },
+      { code: '094', th: 'ศูนย์ราชการจังหวัดเชียงใหม่', en: 'Chiang Mai Government Center', leg: 'both_shared', lat: 18.83900, lng: 98.97180, roadSide: 'จุดจอดร่วมริมถนนหน้าศูนย์ราชการจังหวัดเชียงใหม่ (ใช้ร่วมขาไป-ขากลับ)' },
+      { code: '095', th: 'โรงพยาบาลนครพิงค์', en: 'Nakornping Hospital', leg: 'green_outbound', lat: 18.85420, lng: 98.96850, roadSide: 'ริม ถ.โชตนา/หน้าโรงพยาบาลนครพิงค์ (ฝั่งขาขึ้นเหนือ)' },
+      { code: '096', th: 'วิทยาลัยพยาบาลบรมราชชนนี', en: 'Boromarajonani College of Nursing', leg: 'green_outbound', lat: 18.85620, lng: 98.96790, roadSide: 'ริมถนนหน้าวิทยาลัยพยาบาลบรมราชชนนี เชียงใหม่' },
+      { code: '097', th: 'ศูนย์ส่งเสริมพัฒนาการเด็ก', en: 'Northern Child Development Center', leg: 'green_outbound', lat: 18.85880, lng: 98.96710, roadSide: 'ริมถนนหน้าศูนย์ส่งเสริมพัฒนาการเด็กภาคเหนือ (จุดเหนือสุดก่อนวนกลับ)' },
+      { code: '098', th: 'โรงเรียนนวมินทราชูทิศ พายัพ', en: 'Navamindarajudis Phayap School', leg: 'green_outbound', lat: 18.84580, lng: 98.96980, roadSide: 'ริมถนนหน้าโรงเรียนนวมินทราชูทิศ พายัพ (ขาเข้าสวน อบจ.)' },
+      { code: '099', th: 'สำนักงานอธิบดีผู้พิพากษาภาค 5', en: 'Office of the Chief Judge of Region 5', leg: 'both_shared', lat: 18.84120, lng: 98.97
