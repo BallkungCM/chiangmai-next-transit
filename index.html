@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chiangmai NEXT Transit Lab — ระบบร่วมออกแบบขนส่งมวลชนเชียงใหม่</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- เพิ่ม: เรียกใช้งาน Firebase SDK สำหรับระบบฐานข้อมูล -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+  <style>
+    body { font-family: 'Sarabun', 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 0; overflow-x: hidden; }
+    #transit-map { width: 100%; height: 100%; min-height: 460px; z-index: 10; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    @keyframes pulse-ring { 0% { transform: scale(0.88); opacity: 0.9; } 70% { transform: scale(1.45); opacity: 0; } 100% { transform: scale(1.45); opacity: 0; } }
+    .transfer-hub-pulse { animation: pulse-ring 2.2s infinite; }
+    .leaflet-popup-content-wrapper { border-radius: 14px; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.18); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // ==========================================
+    // 1. ตั้งค่าฐานข้อมูลออนไลน์ (Firebase Config)
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "รอใส่ค่า_API_KEY",
+      authDomain: "รอใส่ค่า_PROJECT_ID.firebaseapp.com",
+      projectId: "รอใส่ค่า_PROJECT_ID",
+      storageBucket: "รอใส่ค่า_PROJECT_ID.appspot.com",
+      messagingSenderId: "รอใส่ค่า_SENDER_ID",
+      appId: "รอใส่ค่า_APP_ID"
+    };
+
+    // เริ่มต้นระบบเชื่อมต่อฐานข้อมูล
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+
+    // ==========================================
+    // ส่วนข้อมูลคงที่ (รบกวนก็อปปี้ข้อมูลเดิมจากไฟล์เก่ามาวางในส่วนนี้)
+    // ==========================================
+    const STORAGE_KEYS = { ADMIN_ROLE: 'cm_next_transit_user_role_v17_beta', OSRM_CACHE: 'cm_next_transit_osrm_cache_v17_beta' };
+    const OPERATION_STATUSES = { /* ใส่ข้อมูล OPERATION_STATUSES เดิม */ };
+    function formatThaiDateTime(isoString) { /* ใส่ฟังก์ชันเดิม */ return isoString; }
+    function extractRouteSubpathOnRoad(routeObj, passStops) { /* ใส่ฟังก์ชันเดิม */ return []; }
+    const MAP_TILE_PROVIDERS = { /* ใส่ข้อมูลเดิม */ };
+    const SERVICE_TYPES = { /* ใส่ข้อมูลเดิม */ };
+    const STATION_LEVELS = { /* ใส่ข้อมูลเดิม */ };
+    const ROUTE_COLORS = [ /* ใส่ข้อมูลเดิม */ ];
+    function getAvailableRouteColor(currentRoutes, isLrt) { return '#BE123C'; /* ใส่ฟังก์ชันเดิม */ }
+    const POPULAR_PLACES_CM = [ /* ใส่ข้อมูลเดิม */ ];
+    function estimateWalkMinutes(meters) { return Math.max(1, Math.round(meters / 75)); }
+    function computeTransitItineraries(originPt, destPt, activeRoutes, stopsMap) { /* ใส่ฟังก์ชันเดิม */ return []; }
+    const SOI_KEYWORDS = ['ซอย', 'ตรอก', 'หมู่บ้าน', 'ซ.', 'soi', 'lane', 'alley'];
+    function isMinorSoiName(roadName = '') { return false; }
+    const callGeminiAPI = async (prompt, systemInstruction, asJson = false) => { /* ใส่ฟังก์ชันเดิม */ };
+    function calculateHaversineMeters(lat1, lon1, lat2, lon2) { /* ใส่ฟังก์ชันเดิม */ return 0; }
+    
+    // ข้อมูลป้ายรถเมล์ไฟฟ้า (แทนที่ด้วย Array ชุดเดิมของคุณบอลที่ยาวๆ ได้เลยครับ)
+    const PAO_LINE_20_RAW_STOPS = [ /* ข้อมูลป้ายสาย 20 เดิม */ ];
+    const PAO_LINE_18_RAW_STOPS = [ /* ข้อมูลป้ายสาย 18 เดิม */ ];
+    function buildInitialStopsMap() { return {}; /* ใส่ฟังก์ชันเดิม */ }
+    const INITIAL_STOPS = buildInitialStopsMap();
+    const INITIAL_ROUTES = [ /* ใส่ข้อมูลเริ่มต้นเส้นทางเดิม */ ];
+
+    // ==========================================
+    // 2. แอปพลิเคชันหลัก
+    // ==========================================
+    function App() {
+      const [stopsMap, setStopsMap] = useState(INITIAL_STOPS);
+      const [routes, setRoutes] = useState(INITIAL_ROUTES);
+      const [commentsMap, setCommentsMap] = useState({});
+      const [userVotesMap, setUserVotesMap] = useState({});
+      
+      const [isAdminMode, setIsAdminMode] = useState(() => localStorage.getItem(STORAGE_KEYS.ADMIN_ROLE) === 'admin');
+      const [activeTab, setActiveTab] = useState('explore');
+      const [selectedRouteId, setSelectedRouteId] = useState('route-cm-lrt-red-master');
+      // ... (State อื่นๆ เช่น searchQuery, tripOriginText ให้คงไว้เหมือนโค้ดเดิมทั้งหมด) ...
+      
+      // State พื้นฐานที่ต้องมีเพื่อให้ UI ไม่พัง
+      const [toast, setToast] = useState(null);
+      const [isAiThinking, setIsAiThinking] = useState(false);
+      const [searchQuery, setSearchQuery] = useState('');
+      const showNotification = (message, type = 'info') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 4000);
+      };
+
+      // ----------------------------------------------------
+      // พระเอกของเรา: ระบบซิงค์ข้อมูลกับ Firebase
+      // ----------------------------------------------------
+      useEffect(() => {
+        // เมื่อเปิดเว็บ จะเช็คว่าในฐานข้อมูลมีข้อมูลหรือยัง ถ้ายังให้เอา INITIAL_ROUTES ไปใส่
+        const initFirebase = async () => {
+          try {
+            const routesSnap = await db.collection('routes').get();
+            if (routesSnap.empty) {
+              INITIAL_ROUTES.forEach(r => db.collection('routes').doc(r.id).set(r));
+              Object.values(INITIAL_STOPS).forEach(s => db.collection('stops').doc(s.id).set(s));
+            }
+          } catch(e) { console.log("รอเชื่อมต่อ Firebase..."); }
+        };
+        initFirebase();
+
+        // เปิดรับฟังข้อมูลอัปเดตแบบ Real-time!
+        const unsubRoutes = db.collection('routes').onSnapshot(snapshot => {
+          if (!snapshot.empty) {
+            setRoutes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          }
+        });
+
+        const unsubStops = db.collection('stops').onSnapshot(snapshot => {
+          if (!snapshot.empty) {
+            const loadedStops = {};
+            snapshot.docs.forEach(doc => { loadedStops[doc.id] = doc.data(); });
+            setStopsMap(loadedStops);
+          }
+        });
+
+        const unsubComments = db.collection('comments').onSnapshot(snapshot => {
+            if(!snapshot.empty) {
+                const cmts = {};
+                snapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    if(!cmts[data.routeId]) cmts[data.routeId] = [];
+                    cmts[data.routeId].push(data);
+                });
+                setCommentsMap(cmts);
+            }
+        });
+
+        return () => { unsubRoutes(); unsubStops(); unsubComments(); };
+      }, []);
+
+      // ----------------------------------------------------
+      // ฟังก์ชันบันทึกเส้นทางขึ้น Cloud
+      // ----------------------------------------------------
+      const handleSaveRouteFromStudio = async (statusToSave) => {
+        // ... (ตรวจสอบข้อมูลแบบเดิม)
+        const routeId = `route-citizen-${Date.now()}`;
+        const newRouteObj = {
+          id: routeId,
+          // ใส่ข้อมูลจากฟอร์ม studioForm ลงไป (เหมือนโค้ดเดิม)
+          updated_at: new Date().toISOString()
+        };
+
+        try {
+          // 1. บันทึกเส้นทางลง Firebase
+          await db.collection('routes').doc(newRouteObj.id).set(newRouteObj);
+          
+          // 2. บันทึกจุดจอดใหม่ๆ ลง Firebase
+          const currentStops = stopsMap; // หรือดึงจาก Ref
+          newRouteObj.stop_ids.forEach(async (sid) => {
+            if(currentStops[sid]) {
+              await db.collection('stops').doc(sid).set(currentStops[sid]);
+            }
+          });
+
+          showNotification('บันทึกเส้นทางขึ้นระบบออนไลน์สำเร็จ! ทุกคนจะเห็นอัปเดตนี้ทันที', 'success');
+          setActiveTab('explore');
+        } catch(error) {
+          showNotification('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+        }
+      };
+
+      // ----------------------------------------------------
+      // ฟังก์ชันลบเส้นทางออกจาก Cloud
+      // ----------------------------------------------------
+      const confirmDeleteRouteAction = async () => {
+        // if (!deleteConfirmRoute) return;
+        try {
+          await db.collection('routes').doc(deleteConfirmRoute.id).delete();
+          showNotification(`ลบเส้นทางออกจากระบบแล้ว ข้อมูลหน้าจอคนอื่นจะหายไปพร้อมกัน`, 'info');
+        } catch(e) {}
+        // setDeleteConfirmRoute(null);
+      };
+
+      // ----------------------------------------------------
+      // ฟังก์ชันโหวต และ คอมเมนต์ (เก็บบน Cloud)
+      // ----------------------------------------------------
+      const handleAddComment = async (routeId, e) => {
+        e.preventDefault();
+        const newComment = {
+          routeId: routeId,
+          author: 'ผู้ร่วมออกแบบ', // ดึงจาก state
+          text: 'ข้อความ...', // ดึงจาก state
+          created_at: new Date().toISOString()
+        };
+        await db.collection('comments').add(newComment);
+        showNotification('ส่งความคิดเห็นเรียบร้อยแล้ว!', 'success');
+      };
+
+      // ==========================================
+      // ส่วนการแสดงผล (Render UI)
+      // เอาโค้ด Return (...) ของคุณบอลเดิมมาวางต่อตรงนี้ได้เลย
+      // ==========================================
+      return (
+        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+           {/* วางโครงสร้าง UI เดิมของคุณทั้งหมดลงที่นี่ครับ */}
+           <h1>นำ UI ของคุณมาวางตรงนี้</h1>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
